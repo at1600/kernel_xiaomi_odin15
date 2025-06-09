@@ -777,8 +777,8 @@ static void binder_transaction_priority(struct binder_thread *thread,
 		desired.sched_policy = SCHED_NORMAL;
 	}
 
-	if (node_prio.prio < t->priority.prio ||
-	    (node_prio.prio == t->priority.prio &&
+	if (node_prio.prio < desired.prio ||
+	    (node_prio.prio == desired.prio &&
 	     node_prio.sched_policy == SCHED_FIFO)) {
 		/*
 		 * In case the minimum priority on the node is
@@ -5873,7 +5873,7 @@ static long binder_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		uint32_t enable;
 
 		if (copy_from_user(&enable, ubuf, sizeof(enable))) {
-			ret = -EINVAL;
+			ret = -EFAULT;
 			goto err;
 		}
 		binder_inner_proc_lock(proc);
