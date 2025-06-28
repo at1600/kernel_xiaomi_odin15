@@ -162,6 +162,7 @@ struct qcom_glink {
 	unsigned long features;
 
 	bool intentless;
+
 	wait_queue_head_t tx_avail_notify;
 	bool sent_read_notify;
 
@@ -1924,7 +1925,7 @@ static void qcom_glink_rx_close(struct qcom_glink *glink, unsigned int rcid)
 	kthread_cancel_work_sync(&channel->intent_work);
 
 	if (channel->rpdev) {
-		strscpy_pad(chinfo.name, channel->name, sizeof(chinfo.name));
+		strlcpy(chinfo.name, channel->name, sizeof(chinfo.name));
 		chinfo.src = RPMSG_ADDR_ANY;
 		chinfo.dst = RPMSG_ADDR_ANY;
 
@@ -1947,9 +1948,6 @@ static void qcom_glink_rx_close_ack(struct qcom_glink *glink, unsigned int lcid)
 	struct rpmsg_channel_info chinfo;
 	struct glink_channel *channel;
 	unsigned long flags;
-
-	/* To wakeup any blocking writers */
-	wake_up_all(&glink->tx_avail_notify);
 
 	spin_lock_irqsave(&glink->idr_lock, flags);
 	channel = idr_find(&glink->lcids, lcid);
