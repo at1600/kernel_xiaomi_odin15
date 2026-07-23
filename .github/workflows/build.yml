@@ -1,38 +1,76 @@
-name: Build Kernel
-
+name: Build Odin15 Kernel 5.4
 on:
-  workflow_dispatch:
+  workflow_dispatch: # 支持手动点击运行
+  push:
+    branches: [ main ] # 源码主分支，核对仓库实际分支名
+
+env:
+  DEFCONFIG: odin15_defconfig
+  ARCH: arm64
+  CLANG_BRANCH: clang+llvm-14.0.6-x86_64-linux-gnu
+  TC_LINK: https://github.com/llvm/llvm-project/releases/download/llvmorg-14.0.6/clang+llvm-14.0.6-x86_64-linux-gnu.tar.xz
+  ANYKERNEL_REPO: https://github.com/osm0sis/AnyKernel3
+  WORKSPACE: ${{ github.workspace }}
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout kernel source
-      uses: actions/checkout@v3
-      with:
-        repository: at1600/kernel_xiaomi_odin15
-        ref: lineage-20
-        path: sm8350
-        fetch-depth: 100
+      - name: Checkout Kernel Source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
-    - name: Checkout gcc toolchain
-      uses: actions/checkout@v3
-      with:
-        repository: mvaisakh/gcc-arm64
-        ref: 05cb20a52f12389c3f2340b5103485108feae302
-        path: toolchain
+      - name: Install Dependencies
+        run: |
+          sudo apt update -y
+          sudo apt install -y build-essential git ccache flex bison libelf-dev bc zip unzip wget curl openssl python3
 
-    - name: Android kernel build
-      run: |
-        sudo apt install libdebuginfod-dev
-        export PATH="$(pwd)/toolchain/bin:${PATH}"
-        cd sm8350 && bash build.sh
-        git log --no-decorate --oneline -n 100 > out/ak3/ChangeLog.txt
+      - name: Download Clang 14 Toolchain
+        run: |
+          mkdir -p $WORKSPACE/toolchain
+          cd $WORKSPACE/toolchain
+          wget ${{ env.TC_LINK }}
+          tar -xf *.tar.xz
+          mv ${CLANG_BRANCH} clang
+          echo "PATH=$WORKSPACE/toolchain/clang/bin:$PATH" >> $GITHUB_ENV
 
-    - name: Upload final output
-      uses: actions/upload-artifact@v3
-      with:
-        name: release
-        path: |
-          sm8350/out/ak3/ChangeLog.txt
-          sm8350/out/ak3/*.zip
+      - name: Setup Ccache
+        uses: actions/cache@v4
+        with:
+          path: ~/.ccache
+          key: ${{ github.ref_name }}-clang14-odin15
+        run: |
+          ccache -M 10G
+          echo "CCACHE_DIR=~/.ccache" >> $GITHUB_ENV
+
+      - name: Generate Defconfig
+        run: |
+          make O=out ${{ env.DEFCONFIG }}
+
+      - name: Compile Kernel
+        run: |
+          make -j$(nproc) O=out \
+            CC="ccache clang" \
+            LLVM=1 \
+            KCFLAGS=-Wno-error
+          # 5.4内核关闭 LLVM_IAS=1 避免汇编报错
+
+      - name: Prepare AnyKernel3
+        run: |
+          git clone --depth=1 ${{ env.ANYKERNEL_REPO }} anykernel
+          rm -rf anykernel/Image anykernel/dtbo.img
+          cp out/arch/arm64/boot/Image anykernel/
+          cp out/arch/arm64/boot/dtbo.img anykernel/
+
+      - name: Create Flashable Zip
+        run: |
+          cd anykernel
+          zip -r9 Odin15-Kernel-${{ github.sha }}.zip *
+          mv Odin15-Kernel-${{ github.sha }}.zip $WORKSPACE/
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Odin15-Flashable-Kernel
+          path: ${{ workspace }}/Odin15-Kernel-*.zip
