@@ -1,16 +1,14 @@
 name: Build Odin15 Kernel 5.4
 on:
-  workflow_dispatch: # 支持手动点击运行
+  workflow_dispatch: # 手动运行
   push:
-    branches: [ main ] # 源码主分支，核对仓库实际分支名
+    branches: [ main ] # 核对你的源码分支
 
 env:
   DEFCONFIG: gki_defconfig
   ARCH: arm64
-  CLANG_BRANCH: clang+llvm-14.0.6-x86_64-linux-gnu
   TC_LINK: https://github.com/llvm/llvm-project/releases/download/llvmorg-14.0.6/clang+llvm-14.0.6-x86_64-linux-gnu.tar.xz
   ANYKERNEL_REPO: https://github.com/osm0sis/AnyKernel3
-  WORKSPACE: ${{ github.workspace }}
 
 jobs:
   build:
@@ -28,33 +26,34 @@ jobs:
 
       - name: Download Clang 14 Toolchain
         run: |
-          mkdir -p $WORKSPACE/toolchain
-          cd $WORKSPACE/toolchain
+          mkdir -p toolchain
+          cd toolchain
           wget ${{ env.TC_LINK }}
           tar -xf *.tar.xz
-          mv ${CLANG_BRANCH} clang
-          echo "PATH=$WORKSPACE/toolchain/clang/bin:$PATH" >> $GITHUB_ENV
+          mv clang+llvm-14.0.6-x86_64-linux-gnu clang
+          echo "PATH=${{ github.workspace }}/toolchain/clang/bin:$PATH" >> $GITHUB_ENV
 
-      - name: Setup Ccache
+      - name: Cache ccache
         uses: actions/cache@v4
         with:
           path: ~/.ccache
-          key: ${{ github.ref_name }}-clang14-odin15
+          key: odin15-clang14-${{ github.ref_name }}
+
+      - name: Config ccache
         run: |
           ccache -M 10G
           echo "CCACHE_DIR=~/.ccache" >> $GITHUB_ENV
 
-      - name: Generate Defconfig
+      - name: Generate defconfig
         run: |
           make O=out ${{ env.DEFCONFIG }}
 
-      - name: Compile Kernel
+      - name: Start Compile
         run: |
           make -j$(nproc) O=out \
             CC="ccache clang" \
             LLVM=1 \
             KCFLAGS=-Wno-error
-          # 5.4内核关闭 LLVM_IAS=1 避免汇编报错
 
       - name: Prepare AnyKernel3
         run: |
@@ -63,14 +62,14 @@ jobs:
           cp out/arch/arm64/boot/Image anykernel/
           cp out/arch/arm64/boot/dtbo.img anykernel/
 
-      - name: Create Flashable Zip
+      - name: Build Flash Zip
         run: |
           cd anykernel
           zip -r9 Odin15-Kernel-${{ github.sha }}.zip *
-          mv Odin15-Kernel-${{ github.sha }}.zip $WORKSPACE/
+          mv Odin15-Kernel-${{ github.sha }}.zip ${{ github.workspace }}/
 
-      - name: Upload Artifact
+      - name: Upload Zip Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Odin15-Flashable-Kernel
-          path: ${{ workspace }}/Odin15-Kernel-*.zip
+          name: Odin15-Kernel-Build
+          path: Odin15-Kernel-*.zip
