@@ -5,7 +5,7 @@ on:
     branches: [ main ] # 源码主分支，核对仓库实际分支名
 
 env:
-  DEFCONFIG: odin15_defconfig
+  DEFCONFIG: gki_defconfig
   ARCH: arm64
   CLANG_BRANCH: clang+llvm-14.0.6-x86_64-linux-gnu
   TC_LINK: https://github.com/llvm/llvm-project/releases/download/llvmorg-14.0.6/clang+llvm-14.0.6-x86_64-linux-gnu.tar.xz
